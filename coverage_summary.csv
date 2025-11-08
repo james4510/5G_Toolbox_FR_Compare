@@ -1,0 +1,7 @@
+Scenario,Frequency,Coverage_m,BS_Ratio
+Urban,FR1,750,1
+Urban,FR2,0,Inf
+Urban,WiFi,750,1
+Open,FR1,3000,1
+Open,FR2,300,100
+Open,WiFi,3000,1

@@ -1,0 +1,8 @@
+distance_min_m,distance_max_m,distance_center_m,FR1_mean_SNR_dB,FR1_std_SNR_dB,FR1_mean_Throughput_Mbps,FR1_mean_Pr_dBm,FR1_coverage_10dB_percent,FR1_coverage_15dB_percent,FR2_mean_SNR_dB,FR2_std_SNR_dB,FR2_mean_Throughput_Mbps,FR2_mean_Pr_dBm,FR2_coverage_10dB_percent,FR2_coverage_15dB_percent,SNR_degradation_dB,Throughput_degradation_percent,Pr_degradation_dB,is_critical_degradation
+0,15,7.5,32.8365257610683,5.31015603023549,1091.05924466973,-61.1386629430395,99.7630331753555,98.8151658767773,11.3123745935337,5.31254031247325,1577.7155172618,-76.6422141972945,59.9526066350711,17.2985781990521,21.5241511675347,-44.6040189815165,15.503551254255,1
+15,30,22.5,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0
+30,45,37.5,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0
+45,60,52.5,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0
+60,75,67.5,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0
+75,90,82.5,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0
+90,105,97.5,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0

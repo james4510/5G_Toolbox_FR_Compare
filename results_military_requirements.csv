@@ -1,0 +1,3 @@
+frequency_GHz,bandwidth_MHz,SNR_compliance_percent,throughput_compliance_percent,full_compliance_percent,meets_target,gap_to_target_percent,current_Pt_dBm,required_Pt_dBm,power_increase_dB,power_increase_feasible,additional_BS_needed,suggested_BS_lat,suggested_BS_lon,suggested_antenna_gain_dB,priority_1,priority_2,priority_3,recommendation
+4.7,100,97.7715877437326,100,97.7715877437326,1,-2.7715877437326,23,25.7991729928202,2.79917299282024,1,0,NaN,NaN,2.79917299282024,N/A,N/A,N/A,현재 구성 유지
+28,400,8.91364902506964,99.8607242339833,8.91364902506964,0,86.0863509749304,23,33.9565166362029,10.9565166362029,1,10,37.4544077823474,127.134842454919,10.9565166362029,기지국 10개 추가,Massive MIMO (8x8 이상) 적용,적응형 빔포밍 구현,기지국 10개 추가 + Massive MIMO (8x8 이상) 적용

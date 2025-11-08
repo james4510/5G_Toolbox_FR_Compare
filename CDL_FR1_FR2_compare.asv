@@ -1,0 +1,329 @@
+%% FR1 vs FR2 대표 포인트 비교 (nrCDLChannel + MCS 기반 PHY throughput + Heatmap)
+% 파일명: FR1_FR2_point_compare_with_hest_mcs_heatmap.m
+% 실행환경: MATLAB with 5G Toolbox, Phased Array System Toolbox, Mapping/Plot 기본함수
+% 출력: results_FR1_FR2_detailed.csv, png 파일들(SNR_map.png, Throughput_map.png), 채널 응답 figure
+
+clear; close all; clc;
+
+%% ----- 사용자 설정 -----
+% BS 설정 (원하시면 좌표 수정)
+bsPosition = [37.4536, 127.1369]; % lat, lon (기지국)
+bsAntennaSize = [4 4];
+bsArrayOrientation = [90 0].';
+
+% 송신 전력 설정 (dBm)
+Pt_dBm = 23;
+
+% 대표 포인트 6개 (위도, 경도) - 필요시 수정
+uePoints = [
+    37.45550 127.13380;  % point 1
+    37.45490 127.13400;  % point 2
+    37.45470 127.13500;  % point 3
+    37.45510 127.13520;  % point 4
+    37.45530 127.13450;  % point 5
+    37.45485 127.13350   % point 6
+];
+
+% UE 안테나/배열 파라미터
+ueAntSize = [2 2];
+ueArrayOrientation = [-30 45].';
+
+% 반사 개수
+reflectionsOrder = 1;
+
+% 실험 주파수 및 대역폭(Hz)
+freqs = [4.7e9, 28e9];       % FR1, FR2
+bws   = [100e6, 400e6];      % 대역폭 (Throughput 계산에 사용)
+
+% OFDM 설정 (채널 샘플레이트 계산용)
+SCS = 15; NRB = 52;
+
+% 출력 파일명
+outCSV = "results_FR1_FR2_detailed.csv";
+
+% MCS 근사 테이블 (SNR thresholds in dB -> spectral efficiency bits/s/Hz)
+% 이 테이블은 근사치입니다. 필요시 실제 NR MCS표로 교체하세요.
+mcs_thresholds_dB = [-Inf, -5, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 22];
+mcs_se = [0, 0.15, 0.3, 0.6, 1.2, 1.8, 2.4, 3.0, 3.6, 4.0, 4.5, 5.0, 5.5]; 
+% mcs_se는 bits/s/Hz (근사). 실제 MCS를 사용하려면 이 부분을 표로 대체.
+
+%% ----- 준비 -----
+if exist('viewer','var') && isvalid(viewer)
+    clearMap(viewer);
+else
+    try
+        viewer = siteviewer("Basemap","openstreetmap","Buildings","seongnam.osm");
+    catch
+        viewer = []; % siteviewer not available or OSM missing
+    end
+end
+
+% BS txsite (초기화 with first freq, will update freq inside loop)
+bsSite = txsite("Name","Base station", ...
+    "Latitude",bsPosition(1),"Longitude",bsPosition(2),...
+    "AntennaAngle",bsArrayOrientation(1:2),...
+    "AntennaHeight",4,...
+    "TransmitterFrequency",freqs(1));
+
+if ~isempty(viewer)
+    show(bsSite);
+end
+
+% 상수
+c = physconst('LightSpeed');
+
+% OFDM sample rate info
+ofdmInfo = nrOFDMInfo(NRB,SCS);
+
+% 결과 테이블 초기화
+results = table();
+rowIdx = 0;
+
+%% ----- 메인 루프: 주파수별, 포인트별 -----
+for fIdx = 1:length(freqs)
+    fc = freqs(fIdx);
+    bw = bws(fIdx);
+    fprintf("\n=== Frequency: %.3f GHz (BW = %.1f MHz) ===\n", fc/1e9, bw/1e6);
+    
+    % BS 송신 주파수 업데이트
+    bsSite.TransmitterFrequency = fc;
+    
+    lambda = c / fc;
+    % BS antenna array (주파수에 따라 spacing 계산)
+    bsArray = phased.NRRectangularPanelArray('Size',[bsAntennaSize(1:2) 1 1], ...
+        'Spacing',[0.5*lambda*[1 1] 1 1]);
+    bsArray.ElementSet = {phased.NRAntennaElement};
+    
+    % Propagation model (raytracing)
+    pm = propagationModel("raytracing","Method","sbr", "MaxNumReflections", reflectionsOrder, "MaxNumDiffractions",0);
+    
+    for p = 1:size(uePoints,1)
+        lat = uePoints(p,1); lon = uePoints(p,2);
+        fprintf("Point %d: (%.6f, %.6f)\n", p, lat, lon);
+        
+        % rxsite 생성
+        rx = rxsite("Name", sprintf("UE_p%d_f%d", p, fIdx), ...
+            "Latitude", lat, "Longitude", lon, ...
+            "AntennaHeight", 1, ...
+            "AntennaAngle", ueArrayOrientation(1:2));
+        if ~isempty(viewer)
+            show(rx);
+        end
+        
+        % Raytrace
+        rays = raytrace(bsSite, rx, pm, "Type","pathloss");
+        if isempty(rays) || isempty(rays{1})
+            warning("Point %d, fIdx %d: raytrace 결과 없음. 결과는 NaN으로 저장합니다.", p, fIdx);
+            % 기록
+            row.fc = fc;
+            row.point = p;
+            row.lat = lat; row.lon = lon;
+            row.LOS = false;
+            row.numPaths = 0;
+            row.Pr_dBm = NaN;
+            row.SNR_dB = NaN;
+            row.SE = NaN;
+            row.Throughput_bps = NaN;
+            row.delaySpread_s = NaN;
+            row.hest_present = false;
+            results = [results; struct2table(row)]; %#ok<AGROW>
+            continue;
+        end
+        
+        % path 파라미터 추출
+        pathDelays = [rays{1}.PropagationDelay] - min([rays{1}.PropagationDelay]); % s
+        pathLosses = [rays{1}.PathLoss]; % dB
+        avgPathGains_dB = -pathLosses;   % dB (gain)
+        pathAoD = [rays{1}.AngleOfDeparture];
+        pathAoA = [rays{1}.AngleOfArrival];
+        isLOS = any([rays{1}.LineOfSight]);
+        numPaths = numel(pathDelays);
+        
+        % --- nrCDLChannel 구성 (Custom CDL using ray results) ---
+        channel = nrCDLChannel;
+        channel.DelayProfile = 'Custom';
+        channel.PathDelays = pathDelays;
+        channel.AveragePathGains = avgPathGains_dB;
+        channel.AnglesAoD = pathAoD(1,:);
+        channel.AnglesZoD = 90 - pathAoD(2,:);
+        channel.AnglesAoA = pathAoA(1,:);
+        channel.AnglesZoA = 90 - pathAoA(2,:);
+        channel.HasLOSCluster = isLOS;
+        channel.CarrierFrequency = fc;
+        channel.NormalizeChannelOutputs = false;
+        channel.NormalizePathGains = false;
+        channel.SampleRate = ofdmInfo.SampleRate;
+        channel.ChannelFiltering = false;
+        
+        % 안테나 어레이 연결 (UE & BS)
+        ueArray = phased.NRRectangularPanelArray('Size',[ueAntSize(1:2) 1 1], 'Spacing',[0.5*lambda*[1 1] 1 1]);
+        ueArray.ElementSet = {phased.IsotropicAntennaElement};
+        channel.ReceiveAntennaArray = ueArray;
+        channel.ReceiveArrayOrientation = [ueArrayOrientation(1); (-1)*ueArrayOrientation(2); 0];
+        channel.TransmitAntennaArray = bsArray;
+        channel.TransmitArrayOrientation = [bsArrayOrientation(1); (-1)*bsArrayOrientation(2); 0];
+        
+        % 채널 생성 (pathGains : multi-dim)
+        try
+            [pathGains, sampleTimes] = channel();
+            hest_present = true;
+        catch ME
+            warning("Channel generation failed at point %d freq %d: %s", p, fIdx, ME.message);
+            pathGains = []; sampleTimes = [];
+            hest_present = false;
+        end
+        
+        % pathGains → 수신전력 계산 (안전모드)
+        if ~isempty(pathGains)
+            % pathGains dims: [txRx?] but earlier we used permute; to compute total power: sum of abs(pathGains)^2 across taps and antennas
+            pg = permute(pathGains,[2 1 3 4]); % consistent with earlier code
+            if isLOS
+                % LOS 처리 (원래 코드 관례 유지)
+                pg = [sum(pg(1:2,:,:,:)); pg(3:end,:,:,:)];
+            end
+            pg_power = abs(pg).^2; % power per path
+            % take first tx-first rx first sample as representative instantaneous? but for averaged Pr we use avgPathGains from raytracing
+            % We'll compute Pr from avgPathGains (raytrace) as reliable estimate (sum of linear gains * Pt)
+            pathGains_lin = 10.^(avgPathGains_dB./10); % linear power gains per path
+            Pt_mW = 10^(Pt_dBm/10);
+            Pr_mW = Pt_mW * sum(pathGains_lin); % sum of path powers
+            Pr_dBm = 10*log10(Pr_mW);
+        else
+            Pr_dBm = NaN;
+        end
+        
+        % 노이즈 전력 (dBm)
+        kB = 1.38064852e-23; T = 290; % K
+        Noise_W = kB * T * bw;
+        Noise_dBm = 10*log10(Noise_W) + 30;
+        
+        % SNR
+        SNR_dB = Pr_dBm - Noise_dBm;
+        SNR_lin = 10^(SNR_dB/10);
+        
+        % MCS → Spectral Efficiency (근사) 적용
+        % find highest threshold <= SNR_dB
+        % --- MCS 근사 테이블 적용 (SNR이 유효한 경우만) ---
+        if isfinite(SNR_dB)
+    se = interp1(mcs_thresholds_dB, mcs_se, SNR_dB, 'previous', 'extrap');
+    se = max(se, 0);
+else
+    se = 0;
+end
+        % ensure non-negative
+        se = max(se, 0);
+        % Throughput
+        throughput_bps = se * bw;
+        
+        % 채널 추정 (hest) - 만약 pathGains/samptimes 존재하면 수행
+        if hest_present && ~isempty(pathGains)
+            try
+                pathFilters = getPathFilters(channel);
+                nSlot = 0;
+                [offset,~] = nrPerfectTimingEstimate(pathGains,pathFilters);
+                hest = nrPerfectChannelEstimate(pathGains,pathFilters,NRB,SCS,nSlot,offset,sampleTimes);
+                % hest은 (subcarriers x tx x rx x other) 형태
+                % 사용 예시: 채널 매그니튜드 응답 시각화
+                fig_h = figure('Name',sprintf('UE%d_f%d Channel Magnitude',p,fIdx));
+                surf(pow2db(abs(hest(:,:,1,1)).^2));
+                shading('flat'); xlabel('OFDM Symbols'); ylabel('Subcarriers'); zlabel('Magnitude Squared (dB)');
+                title(sprintf('UE%d - %.1f GHz Channel Magnitude (1^{st} tx - 1^{st} rx)', p, fc/1e9));
+                saveas(fig_h, sprintf('ChannelMag_P%d_f%d.png',p,fIdx));
+            catch ME
+                warning("hest 계산 실패 at P%d f%d: %s", p, fIdx, ME.message);
+            end
+        end
+        
+        % RMS Delay spread (s)
+        P_sum = sum(pathGains_lin);
+        if P_sum > 0
+            tau_mean = sum(pathDelays .* pathGains_lin) / P_sum;
+            tau_rms = sqrt( sum( ((pathDelays - tau_mean).^2) .* pathGains_lin ) / P_sum );
+        else
+            tau_rms = NaN;
+        end
+        
+        % 결과 저장
+        row.fc = fc;
+        row.point = p;
+        row.lat = lat;
+        row.lon = lon;
+        row.LOS = isLOS;
+        row.numPaths = numPaths;
+        row.Pr_dBm = Pr_dBm;
+        row.Noise_dBm = Noise_dBm;
+        row.SNR_dB = SNR_dB;
+        row.SE = se;
+        row.Throughput_bps = throughput_bps;
+        row.delaySpread_s = tau_rms;
+        row.hest_present = hest_present;
+        results = [results; struct2table(row)]; %#ok<AGROW>
+    end
+end
+
+%% ----- 저장 및 요약 -----
+writetable(results, outCSV);
+fprintf("결과가 %s 로 저장되었습니다. 행 수: %d\n", outCSV, height(results));
+disp(results);
+
+%% ----- Heatmap 시각화 (lat/lon scatter heatmap) -----
+% SNR map
+figure('Name','SNR Map');
+lat = results.lat(results.fc==freqs(1)); lon = results.lon(results.fc==freqs(1)); snr1 = results.SNR_dB(results.fc==freqs(1));
+lat2 = results.lat(results.fc==freqs(2)); lon2 = results.lon(results.fc==freqs(2)); snr2 = results.SNR_dB(results.fc==freqs(2));
+
+% Combined subplot
+subplot(1,2,1);
+scatter(lon, lat, 200, snr1, 'filled'); colorbar; colormap(jet);
+title(sprintf('SNR (%.1f GHz)', freqs(1)/1e9));
+xlabel('Longitude'); ylabel('Latitude');
+
+subplot(1,2,2);
+scatter(lon2, lat2, 200, snr2, 'filled'); colorbar; colormap(jet);
+title(sprintf('SNR (%.1f GHz)', freqs(2)/1e9));
+xlabel('Longitude'); ylabel('Latitude');
+
+saveas(gcf,'SNR_map.png');
+
+% Throughput map (Mbps)
+figure('Name','Throughput Map');
+tp1 = results.Throughput_bps(results.fc==freqs(1))/1e6;
+tp2 = results.Throughput_bps(results.fc==freqs(2))/1e6;
+
+subplot(1,2,1);
+scatter(lon, lat, 200, tp1, 'filled'); colorbar; colormap(parula);
+title(sprintf('Throughput (Mbps) (%.1f GHz)', freqs(1)/1e9));
+xlabel('Longitude'); ylabel('Latitude');
+
+subplot(1,2,2);
+scatter(lon2, lat2, 200, tp2, 'filled'); colorbar; colormap(parula);
+title(sprintf('Throughput (Mbps) (%.1f GHz)', freqs(2)/1e9));
+xlabel('Longitude'); ylabel('Latitude');
+
+saveas(gcf,'Throughput_map.png');
+
+fprintf("Heatmap PNG 파일 저장 완료: SNR_map.png, Throughput_map.png\n");
+
+%% ----- (선택) siteviewer 위에 색 마커 겹쳐 그리기 시도 -----
+if ~isempty(viewer)
+    try
+        % siteviewer의 internal axes 위에 scatter를 그려 본다 (환경에 따라 가능/불가)
+        ax = viewer.Axes;
+        figure(viewer.Figure); % focus
+        hold(ax,'on');
+        % FR1 pts
+        scatter(ax, results.lon(results.fc==freqs(1)), results.lat(results.fc==freqs(1)), 200, results.SNR_dB(results.fc==freqs(1)), 'filled');
+        % FR2 pts (테두리로 구분)
+        scatter(ax, results.lon(results.fc==freqs(2)), results.lat(results.fc==freqs(2)), 200, results.Throughput_bps(results.fc==freqs(2))/1e6, 'filled', 'MarkerEdgeColor','k');
+        title(ax, 'Overlay: FR1 SNR (color) & FR2 Throughput (color)');
+        colorbar;
+        hold(ax,'off');
+        fprintf("siteviewer overlay 시도 완료 (환경에 따라 정확히 보이지 않을 수 있음).\n");
+    catch ME
+        warning("siteviewer overlay 실패: %s\n(대신 저장된 PNG를 참고하세요.)", ME.message);
+    end
+else
+    warning("siteviewer 사용 불가: siteviewer가 초기화되지 않았습니다. PNG heatmap을 확인하세요.");
+end
+
+fprintf("스크립트 완료.\n");
