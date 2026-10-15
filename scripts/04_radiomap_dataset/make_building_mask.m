@@ -1,7 +1,7 @@
 %% [Step 0] 초기 설정 (Power Map 생성 때와 완벽히 동일해야 함)
 clear; clc;
 
-osmFile = "_seongnam_map.osm";
+osmFile = "seongnam_map.osm";
 bsPositions = [37.4516, 127.1295]; % 송신기 위치
 gridSize = 256;          % 저장할 이미지 해상도 (256x256)
 mapWidthMeters = 500;    % 맵 크기 (500m)

@@ -2,7 +2,7 @@
 clear; clc;
 
 % 1. 맵 및 송신기 설정
-osmFile = "_seongnam_map.osm";
+osmFile = "seongnam_map.osm";
 if exist(osmFile, 'file')
     viewer = siteviewer("Basemap","openstreetmap","Buildings",osmFile);    
 else

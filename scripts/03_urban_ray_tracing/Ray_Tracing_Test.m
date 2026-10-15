@@ -85,7 +85,7 @@ for s_idx = 1:length(scenariosToRun)
             scenario.antAngle(1), scenario.antAngle(2));
     
     % Site Viewer
-    viewer = siteviewer(Buildings="_seongnam_map.osm", Basemap="topographic");
+    viewer = siteviewer(Buildings="seongnam_map.osm", Basemap="topographic");
     
     % 기지국 생성
     tx = txsite(Name=scenario.name, ...

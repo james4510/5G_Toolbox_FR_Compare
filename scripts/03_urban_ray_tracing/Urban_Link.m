@@ -1,6 +1,6 @@
 %% 1. 환경 설정 및 맵 로드
 clear; clc; close all;
-viewer = siteviewer(Buildings="_seongnam_map.osm", Basemap="topographic");
+viewer = siteviewer(Buildings="seongnam_map.osm", Basemap="topographic");
 
 %% 2. 송신국 (Transmitter) 설정 - 가천대 AI 공학관 위치
 % 논문 비교를 위해 동일 위치 고정

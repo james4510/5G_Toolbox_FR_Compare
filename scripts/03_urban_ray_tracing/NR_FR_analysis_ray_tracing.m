@@ -5,7 +5,7 @@ close all;
 clc;
 
 %% 1. 시뮬레이션 파라미터 설정
-osmFile = '_seongnam_map.osm';
+osmFile = 'seongnam_map.osm';
 simulationName = '5G_Coverage_Analysis';
 
 % 관심 영역 좌표

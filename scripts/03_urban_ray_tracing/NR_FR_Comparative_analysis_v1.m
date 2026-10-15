@@ -49,7 +49,7 @@ if exist('viewer','var') && isvalid(viewer)
     clearMap(viewer);
 else
     try
-        viewer = siteviewer("Basemap","openstreetmap","Buildings","_seongnam_map.osm");
+        viewer = siteviewer("Basemap","openstreetmap","Buildings","seongnam_map.osm");
     catch
         viewer = siteviewer("Basemap","openstreetmap");
     end

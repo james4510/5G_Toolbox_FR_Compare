@@ -20,7 +20,7 @@ NRB = 52; % number of resource blocks, 10 MHz bandwidth
 if exist('viewer','var') && isvalid(viewer) % viewer handle exists and viewer window is open
     clearMap(viewer);
 else
-    viewer = siteviewer("Basemap","openstreetmap","Buildings","_seongnam_map.osm");
+    viewer = siteviewer("Basemap","openstreetmap","Buildings","seongnam_map.osm");
 end
 
 bsSite1 = txsite("Name","BS1 - Gachon Univ(NLoS+LoS)",...

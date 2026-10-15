@@ -115,8 +115,7 @@ MATLAB 5G Toolbox와 Ray Tracing(Communications / Antenna Toolbox)을 이용해
 | `gachon_univ_map.osm`, `gachon_mangkeong.osm` | 가천대 캠퍼스 |
 | `gapyeong.osm`, `seoraksan.osm`, `taebaeksan.osm` | 산악 지형 비교용 |
 
-> **주의:** 일부 스크립트는 `_seongnam_map.osm`(앞에 밑줄)을 참조하지만 저장소에는 `seongnam_map.osm`만 있습니다.
-> 해당 스크립트를 실행하려면 파일명을 맞춰 주거나 스크립트의 `osmFile` 값을 수정하세요.
+> **참고:** 스크립트들은 `seongnam.osm` 또는 `seongnam_map.osm`을 파일명으로만 참조하므로 `setup`으로 `data/osm`이 경로에 올라가 있어야 합니다.
 
 ## 정리 이력
 

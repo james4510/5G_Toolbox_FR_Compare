@@ -8,7 +8,7 @@
 % lauhcned rays
 
 %% Import and Visualize buildings Data
-viewer = siteviewer(Buildings="_seongnam_map.osm",Basemap="topographic");
+viewer = siteviewer(Buildings="seongnam_map.osm",Basemap="topographic");
 
 %% =======================================================
 %%                Directional Antenna Setup

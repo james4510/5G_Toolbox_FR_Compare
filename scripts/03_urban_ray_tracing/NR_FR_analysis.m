@@ -2,7 +2,7 @@
 clear; clc; close all;
  
 %% Import and Visualize buildings Data
-viewer = siteviewer(Buildings="_seongnam_map.osm", Basemap="topographic");
+viewer = siteviewer(Buildings="seongnam_map.osm", Basemap="topographic");
 
 %% Directional Antenna Setup
 % FR1 (4.7 GHz) - 8x8 Antenna Array
