@@ -1,4 +1,4 @@
-%% FR1 vs FR2 분석: TDD Configuration 포함
+%% FR1 vs FR2 분석: 실제 UE 위치만 분석 (히트맵 제거)
 
 clear; close all; clc;
 
@@ -10,10 +10,6 @@ bsArrayOrientation = [90 0].';
 
 % 송신 전력 설정 (dBm)
 Pt_dBm = 30;
-
-% 히트맵 설정
-heatmap_radius_m = 200;  % BS로부터의 반경 (미터)
-grid_resolution = 40;    % 각 차원의 그리드 포인트 수 (증가: 더 조밀)
 
 % UE 원형 배치 설정
 ue_distances = [15, 30, 45, 60, 75, 90];  % BS로부터의 거리 (미터)
@@ -80,12 +76,11 @@ SNR_thresholds = [0, 5, 10, 15, 20];
 SCS = 15; NRB = 52;
 
 % 출력 파일명
-outCSV_points = "results_FR1_FR2_points.csv";
-outCSV_heatmap = "results_FR1_FR2_heatmap.csv";
-outCSV_coverage = "results_FR1_FR2_coverage_stats.csv";
+outCSV_points = "results_FR1_FR2_UE_only.csv";
 outCSV_ue_coordinates = "ue_coordinates.csv";
 outCSV_tdd_comparison = "results_TDD_comparison.csv";
 outCSV_tdd_distance = "results_TDD_vs_distance.csv";
+outCSV_coverage = "results_coverage_stats_UE_only.csv";
 
 %% ----- 좌표 변환 함수 -----
 meters_to_lat = @(m) m / 111000;
@@ -102,7 +97,7 @@ function [new_lat, new_lon] = offset_position(base_lat, base_lon, distance_m, be
 end
 
 fprintf("========================================================\n");
-fprintf("    FR1 vs FR2 Coverage Analysis with TDD\n");
+fprintf("    FR1 vs FR2 Coverage Analysis (UE Only)\n");
 fprintf("========================================================\n");
 
 %% ----- TDD Configuration 정보 출력 -----
@@ -122,7 +117,7 @@ for cfg_idx = 1:length(tdd_configs)
         cfg.name, cfg.description, dl_ratio, ul_ratio, cfg.DLULPeriodicity);
 end
 
-fprintf("\nDefault TDD Config for heatmap analysis: %s\n", tdd_configs(default_tdd_idx).name);
+fprintf("\nDefault TDD Config for analysis: %s\n", tdd_configs(default_tdd_idx).name);
 
 %% ----- UE 좌표 생성 -----
 fprintf("\n========================================================\n");
@@ -247,13 +242,7 @@ else
     viewer = siteviewer("Basemap","openstreetmap","Buildings","seongnam.osm");
 end
 
-lat_delta = meters_to_lat(heatmap_radius_m);
-lon_delta = meters_to_lon(heatmap_radius_m, bsPosition(1));
-lat_range = [bsPosition(1) - lat_delta, bsPosition(1) + lat_delta];
-lon_range = [bsPosition(2) - lon_delta, bsPosition(2) + lon_delta];
-
-fprintf("  Heatmap range: +/-%dm from BS\n", heatmap_radius_m);
-fprintf("  Grid resolution: %dx%d points\n", grid_resolution, grid_resolution);
+fprintf("  Initializing site viewer...\n");
 
 % BS site
 fc_init = freqs(1);
@@ -286,10 +275,8 @@ c = physconst('LightSpeed');
 ofdmInfo = nrOFDMInfo(NRB,SCS);
 
 results_points = table();
-results_heatmap = table();
 coverage_stats = table();
 
-% ★★★ 테이블 명시적 초기화 (오류 수정의 핵심!) ★★★
 % TDD 비교 결과 테이블
 varTypes_tdd = {'double', 'string', 'double', 'double', 'double', 'double', ...
     'double', 'double', 'double', 'double'};
@@ -305,10 +292,6 @@ varNames_dist = {'TDD_Config', 'Distance_m', 'Avg_Throughput_DL_Mbps', ...
     'Avg_Throughput_UL_Mbps', 'Avg_Throughput_Total_Mbps'};
 results_tdd_distance = table('Size', [0 length(varNames_dist)], ...
     'VariableTypes', varTypes_dist, 'VariableNames', varNames_dist);
-
-lat_grid = linspace(lat_range(1), lat_range(2), grid_resolution);
-lon_grid = linspace(lon_range(1), lon_range(2), grid_resolution);
-[LON_GRID, LAT_GRID] = meshgrid(lon_grid, lat_grid);
 
 %% ===== PART 1: UE 포인트 분석 (TDD 고려) =====
 fprintf("\n========================================================\n");
@@ -424,10 +407,30 @@ for fIdx = 1:length(freqs)
     
     computation_time = toc;
     fprintf("Completed in %.1f seconds\n", computation_time);
+    
+    % 커버리지 통계 (실제 UE 위치 기준)
+    fprintf("\nCoverage Statistics - %.1f GHz (UE positions only):\n", fc/1e9);
+    data_f = results_points(results_points.fc == fc, :);
+    for thr = SNR_thresholds
+        valid_ues = ~isnan(data_f.SNR_dB);
+        total_ues = sum(valid_ues);
+        covered_ues = sum(data_f.SNR_dB(valid_ues) >= thr);
+        coverage_ratio = covered_ues / total_ues * 100;
+        
+        stat_row = struct('fc', fc, 'SNR_threshold_dB', thr, ...
+            'total_UEs', total_ues, 'covered_UEs', covered_ues, ...
+            'coverage_ratio_percent', coverage_ratio);
+        coverage_stats = [coverage_stats; struct2table(stat_row)]; %#ok<AGROW>
+        
+        fprintf("  SNR >= %2d dB: %6.2f%% (%d/%d UEs)\n", ...
+            thr, coverage_ratio, covered_ues, total_ues);
+    end
 end
 
 writetable(results_points, outCSV_points);
+writetable(coverage_stats, outCSV_coverage);
 fprintf("\nSaved: %s\n", outCSV_points);
+fprintf("Saved: %s\n", outCSV_coverage);
 
 %% ===== PART 2: TDD Configuration 비교 분석 =====
 fprintf("\n========================================================\n");
@@ -502,7 +505,6 @@ for fIdx = 1:length(freqs)
             sum_tp_ul = sum_tp_ul + tp_ul;
             valid_count = valid_count + 1;
             
-            % ★★★ string() 함수 사용 (오류 수정!) ★★★
             row_tdd = struct('Frequency_GHz', fc/1e9, ...
                 'TDD_Config', string(cfg.name), ...
                 'DL_Ratio', dl_ratio, 'UL_Ratio', ul_ratio, ...
@@ -603,7 +605,6 @@ for cfg_idx = 1:length(tdd_configs)
             avg_tp_dl = sum_tp_dl / count / 1e6;
             avg_tp_ul = sum_tp_ul / count / 1e6;
             
-            % ★★★ string() 함수 사용 (오류 수정!) ★★★
             row_dist = struct('TDD_Config', string(cfg.name), ...
                 'Distance_m', dist, ...
                 'Avg_Throughput_DL_Mbps', avg_tp_dl, ...
@@ -619,244 +620,120 @@ end
 writetable(results_tdd_distance, outCSV_tdd_distance);
 fprintf("\nSaved: %s\n", outCSV_tdd_distance);
 
-%% ===== PART 4: 히트맵 생성 (Default TDD 사용) =====
+%% ===== PART 4: 실제 UE 위치 Throughput 시각화 =====
 fprintf("\n========================================================\n");
-fprintf("PART 4: Coverage Heatmap Generation (Default TDD)\n");
+fprintf("PART 4: UE Throughput Visualization on Map\n");
 fprintf("========================================================\n");
-
-SNR_maps = cell(length(freqs), 1);
-Pr_maps = cell(length(freqs), 1);
-TP_DL_maps = cell(length(freqs), 1);
-TP_UL_maps = cell(length(freqs), 1);
-distance_map = nan(size(LAT_GRID));
-
-fprintf("Computing distance map...\n");
-for i = 1:size(LAT_GRID,1)
-    for j = 1:size(LAT_GRID,2)
-        lat = LAT_GRID(i,j);
-        lon = LON_GRID(i,j);
-        distance_map(i,j) = latlon_to_meters(bsPosition(1), bsPosition(2), lat, lon);
-    end
-end
-
-heatmap_figs = cell(length(freqs) * 3, 1);
-fig_idx = 0;
-
-cfg_default = tdd_configs(default_tdd_idx);
-total_slots = cfg_default.NumDLSlots + cfg_default.NumULSlots;
-dl_ratio = cfg_default.NumDLSlots / total_slots;
-ul_ratio = cfg_default.NumULSlots / total_slots;
 
 for fIdx = 1:length(freqs)
     fc = freqs(fIdx);
-    bw = bws(fIdx);
     freq_label = sprintf('%.1f GHz', fc/1e9);
-    fprintf("\nHeatmap: %s (TDD: %s)\n", freq_label, cfg_default.name);
     
-    bsSite.TransmitterFrequency = fc;
-    lambda = c / fc;
+    % 해당 주파수 데이터 추출
+    data_f = results_points(results_points.fc == fc, :);
     
-    pm = propagationModel("raytracing","Method","sbr", ...
-        "MaxNumReflections", reflectionsOrder, "MaxNumDiffractions",0);
+    %% 1) DL Throughput 지도
+    fig_dl = figure('Name', sprintf('DL Throughput Map - %s', freq_label), ...
+        'Position', [100 100 900 700], 'Color', 'w', 'Visible', 'off');
     
-    SNR_map = nan(size(LAT_GRID));
-    Pr_map = nan(size(LAT_GRID));
-    TP_DL_map = nan(size(LAT_GRID));
-    TP_UL_map = nan(size(LAT_GRID));
+    % Throughput 값 (Mbps)
+    tp_dl_mbps = data_f.Throughput_DL_bps / 1e6;
     
-    kB = 1.38064852e-23; T = 290;
-    Noise_W = kB * T * bw;
-    Noise_dBm = 10*log10(Noise_W) + 30;
+    % Scatter plot with color coding
+    scatter(data_f.lon, data_f.lat, 120, tp_dl_mbps, 'filled', 'MarkerEdgeColor', 'k');
+    hold on;
     
-    effective_bw_dl = bw * dl_ratio;
-    effective_bw_ul = bw * ul_ratio;
+    % BS 표시
+    plot(bsPosition(2), bsPosition(1), '^', 'MarkerSize', 16, ...
+        'MarkerFaceColor', [1 0 0], 'MarkerEdgeColor', 'k', 'LineWidth', 2);
     
-    total_points = numel(LAT_GRID);
-    fprintf("Computing %d grid points...\n", total_points);
+    colormap('hot');
+    cb = colorbar;
+    cb.Label.String = 'DL Throughput (Mbps)';
+    cb.FontSize = 11;
+    cb.LineWidth = 1;
     
-    tic;
-    for i = 1:size(LAT_GRID,1)
-        if mod(i,5)==0
-            elapsed = toc;
-            eta = elapsed / i * (size(LAT_GRID,1) - i);
-            fprintf("  Progress: %d/%d rows (%.1f%%, ETA: %.1fs)\n", ...
-                i, size(LAT_GRID,1), i/size(LAT_GRID,1)*100, eta);
-        end
-        for j = 1:size(LAT_GRID,2)
-            lat = LAT_GRID(i,j);
-            lon = LON_GRID(i,j);
-            
-            rx_temp = rxsite("Latitude", lat, "Longitude", lon, ...
-                "AntennaHeight", 1, "AntennaAngle", ueArrayOrientation(1:2));
-            
-            rays = raytrace(bsSite, rx_temp, pm, "Type","pathloss");
-            
-            if isempty(rays) || isempty(rays{1})
-                continue;
-            end
-            
-            pathLosses = [rays{1}.PathLoss];
-            avgPathGains_dB = -pathLosses;
-            pathGains_lin = 10.^(avgPathGains_dB./10);
-            
-            Pt_mW = 10^(Pt_dBm/10);
-            Pr_mW = Pt_mW * sum(pathGains_lin);
-            Pr_dBm_val = 10*log10(Pr_mW);
-            
-            SNR_dB_val = Pr_dBm_val - Noise_dBm;
-            SNR_lin_val = 10^(SNR_dB_val/10);
-            
-            % TDD 고려한 Throughput
-            throughput_dl_bps = effective_bw_dl * log2(1 + SNR_lin_val);
-            throughput_ul_bps = effective_bw_ul * log2(1 + SNR_lin_val);
-            
-            Pr_map(i,j) = Pr_dBm_val;
-            SNR_map(i,j) = SNR_dB_val;
-            TP_DL_map(i,j) = throughput_dl_bps / 1e6;
-            TP_UL_map(i,j) = throughput_ul_bps / 1e6;
-            
-            % ★★★ string() 함수 사용 (오류 수정!) ★★★
-            row_hm = struct('fc', fc, 'lat', lat, 'lon', lon, ...
-                'distance_m', distance_map(i,j), ...
-                'TDD_Config', string(cfg_default.name), ...
-                'Pr_dBm', Pr_dBm_val, 'SNR_dB', SNR_dB_val, ...
-                'Throughput_DL_Mbps', throughput_dl_bps/1e6, ...
-                'Throughput_UL_Mbps', throughput_ul_bps/1e6);
-            results_heatmap = [results_heatmap; struct2table(row_hm)]; %#ok<AGROW>
-        end
-    end
+    xlabel('Longitude', 'FontSize', 12);
+    ylabel('Latitude', 'FontSize', 12);
+    title(sprintf('DL Throughput - %s (%s)', freq_label, tdd_configs(default_tdd_idx).name), ...
+        'FontSize', 13, 'FontWeight', 'bold');
     
-    computation_time = toc;
-    fprintf("Completed in %.1f seconds\n", computation_time);
+    grid on;
+    axis equal tight;
+    set(gca, 'FontSize', 11, 'LineWidth', 1);
+    box on;
+    hold off;
     
-    SNR_maps{fIdx} = SNR_map;
-    Pr_maps{fIdx} = Pr_map;
-    TP_DL_maps{fIdx} = TP_DL_map;
-    TP_UL_maps{fIdx} = TP_UL_map;
+    saveas(fig_dl, sprintf('UE_DL_Throughput_Map_%s.png', strrep(freq_label, ' ', '_')));
+    fprintf("  Created: UE_DL_Throughput_Map_%s.png\n", strrep(freq_label, ' ', '_'));
     
-    %% SNR 히트맵
-    fig_idx = fig_idx + 1;
-    heatmap_figs{fig_idx} = figure('Name', sprintf('SNR Heatmap - %s', freq_label), ...
-        'Position', [100 100 800 600], 'Color', 'w', 'Visible', 'off');
+    %% 2) UL Throughput 지도
+    fig_ul = figure('Name', sprintf('UL Throughput Map - %s', freq_label), ...
+        'Position', [150 150 900 700], 'Color', 'w', 'Visible', 'off');
     
-    imagesc(lon_grid, lat_grid, SNR_map);
-    set(gca, 'YDir', 'normal');
-    colormap(gca, 'jet');
+    tp_ul_mbps = data_f.Throughput_UL_bps / 1e6;
+    
+    scatter(data_f.lon, data_f.lat, 120, tp_ul_mbps, 'filled', 'MarkerEdgeColor', 'k');
+    hold on;
+    
+    plot(bsPosition(2), bsPosition(1), '^', 'MarkerSize', 16, ...
+        'MarkerFaceColor', [1 0 0], 'MarkerEdgeColor', 'k', 'LineWidth', 2);
+    
+    colormap('parula');
+    cb = colorbar;
+    cb.Label.String = 'UL Throughput (Mbps)';
+    cb.FontSize = 11;
+    cb.LineWidth = 1;
+    
+    xlabel('Longitude', 'FontSize', 12);
+    ylabel('Latitude', 'FontSize', 12);
+    title(sprintf('UL Throughput - %s (%s)', freq_label, tdd_configs(default_tdd_idx).name), ...
+        'FontSize', 13, 'FontWeight', 'bold');
+    
+    grid on;
+    axis equal tight;
+    set(gca, 'FontSize', 11, 'LineWidth', 1);
+    box on;
+    hold off;
+    
+    saveas(fig_ul, sprintf('UE_UL_Throughput_Map_%s.png', strrep(freq_label, ' ', '_')));
+    fprintf("  Created: UE_UL_Throughput_Map_%s.png\n", strrep(freq_label, ' ', '_'));
+    
+    %% 3) SNR 지도
+    fig_snr = figure('Name', sprintf('SNR Map - %s', freq_label), ...
+        'Position', [200 200 900 700], 'Color', 'w', 'Visible', 'off');
+    
+    scatter(data_f.lon, data_f.lat, 120, data_f.SNR_dB, 'filled', 'MarkerEdgeColor', 'k');
+    hold on;
+    
+    plot(bsPosition(2), bsPosition(1), '^', 'MarkerSize', 16, ...
+        'MarkerFaceColor', [1 0 0], 'MarkerEdgeColor', 'k', 'LineWidth', 2);
+    
+    colormap('jet');
     caxis([-10 30]);
-    
     cb = colorbar;
     cb.Label.String = 'SNR (dB)';
-    cb.FontSize = 10;
+    cb.FontSize = 11;
     cb.LineWidth = 1;
     
-    xlabel('Longitude', 'FontSize', 11);
-    ylabel('Latitude', 'FontSize', 11);
-    title(sprintf('SNR Heatmap - %s (%s)', freq_label, cfg_default.name), ...
-        'FontSize', 12, 'FontWeight', 'normal');
+    xlabel('Longitude', 'FontSize', 12);
+    ylabel('Latitude', 'FontSize', 12);
+    title(sprintf('SNR Map - %s', freq_label), ...
+        'FontSize', 13, 'FontWeight', 'bold');
     
-    hold on;
-    plot(bsPosition(2), bsPosition(1), '^', 'MarkerSize', 12, ...
-        'MarkerFaceColor', [1 0 0], 'MarkerEdgeColor', 'none');
-    plot(uePoints(:,2), uePoints(:,1), 'o', 'MarkerSize', 5, ...
-        'MarkerFaceColor', 'w', 'MarkerEdgeColor', 'none');
+    grid on;
+    axis equal tight;
+    set(gca, 'FontSize', 11, 'LineWidth', 1);
+    box on;
     hold off;
     
-    set(gca, 'FontSize', 10, 'LineWidth', 1);
-    axis equal tight;
-    box on;
-    
-    saveas(heatmap_figs{fig_idx}, sprintf('SNR_Heatmap_%s.png', strrep(freq_label, ' ', '_')), 'png');
-    
-    %% DL Throughput 히트맵
-    fig_idx = fig_idx + 1;
-    heatmap_figs{fig_idx} = figure('Name', sprintf('DL Throughput - %s', freq_label), ...
-        'Position', [150 150 800 600], 'Color', 'w', 'Visible', 'off');
-    
-    imagesc(lon_grid, lat_grid, TP_DL_map);
-    set(gca, 'YDir', 'normal');
-    colormap(gca, 'hot');
-    
-    cb = colorbar;
-    cb.Label.String = 'Throughput (Mbps)';
-    cb.FontSize = 10;
-    cb.LineWidth = 1;
-    
-    xlabel('Longitude', 'FontSize', 11);
-    ylabel('Latitude', 'FontSize', 11);
-    title(sprintf('DL Throughput - %s (%s, DL %.0f%%)', freq_label, ...
-        cfg_default.name, dl_ratio*100), 'FontSize', 12, 'FontWeight', 'normal');
-    
-    hold on;
-    plot(bsPosition(2), bsPosition(1), '^', 'MarkerSize', 12, ...
-        'MarkerFaceColor', [1 0 0], 'MarkerEdgeColor', 'none');
-    plot(uePoints(:,2), uePoints(:,1), 'o', 'MarkerSize', 5, ...
-        'MarkerFaceColor', 'w', 'MarkerEdgeColor', 'none');
-    hold off;
-    
-    set(gca, 'FontSize', 10, 'LineWidth', 1);
-    axis equal tight;
-    box on;
-    
-    saveas(heatmap_figs{fig_idx}, sprintf('DL_Throughput_%s.png', strrep(freq_label, ' ', '_')), 'png');
-    
-    %% UL Throughput 히트맵
-    fig_idx = fig_idx + 1;
-    heatmap_figs{fig_idx} = figure('Name', sprintf('UL Throughput - %s', freq_label), ...
-        'Position', [200 200 800 600], 'Color', 'w', 'Visible', 'off');
-    
-    imagesc(lon_grid, lat_grid, TP_UL_map);
-    set(gca, 'YDir', 'normal');
-    colormap(gca, 'parula');
-    
-    cb = colorbar;
-    cb.Label.String = 'Throughput (Mbps)';
-    cb.FontSize = 10;
-    cb.LineWidth = 1;
-    
-    xlabel('Longitude', 'FontSize', 11);
-    ylabel('Latitude', 'FontSize', 11);
-    title(sprintf('UL Throughput - %s (%s, UL %.0f%%)', freq_label, ...
-        cfg_default.name, ul_ratio*100), 'FontSize', 12, 'FontWeight', 'normal');
-    
-    hold on;
-    plot(bsPosition(2), bsPosition(1), '^', 'MarkerSize', 12, ...
-        'MarkerFaceColor', [1 0 0], 'MarkerEdgeColor', 'none');
-    plot(uePoints(:,2), uePoints(:,1), 'o', 'MarkerSize', 5, ...
-        'MarkerFaceColor', 'w', 'MarkerEdgeColor', 'none');
-    hold off;
-    
-    set(gca, 'FontSize', 10, 'LineWidth', 1);
-    axis equal tight;
-    box on;
-    
-    saveas(heatmap_figs{fig_idx}, sprintf('UL_Throughput_%s.png', strrep(freq_label, ' ', '_')), 'png');
-    
-    % 커버리지 통계
-    fprintf("\nCoverage Statistics - %s:\n", freq_label);
-    for thr = SNR_thresholds
-        valid_points = ~isnan(SNR_map);
-        total_valid = sum(valid_points(:));
-        covered = sum(SNR_map(valid_points) >= thr);
-        coverage_ratio = covered / total_valid * 100;
-        
-        stat_row = struct('fc', fc, 'SNR_threshold_dB', thr, ...
-            'total_points', total_valid, 'covered_points', covered, ...
-            'coverage_ratio_percent', coverage_ratio);
-        coverage_stats = [coverage_stats; struct2table(stat_row)]; %#ok<AGROW>
-        
-        fprintf("  SNR >= %2d dB: %6.2f%% (%d/%d)\n", ...
-            thr, coverage_ratio, covered, total_valid);
-    end
+    saveas(fig_snr, sprintf('UE_SNR_Map_%s.png', strrep(freq_label, ' ', '_')));
+    fprintf("  Created: UE_SNR_Map_%s.png\n", strrep(freq_label, ' ', '_'));
 end
-
-writetable(results_heatmap, outCSV_heatmap);
-writetable(coverage_stats, outCSV_coverage);
-fprintf("\nSaved: %s\n", outCSV_heatmap);
-fprintf("Saved: %s\n", outCSV_coverage);
 
 %% ===== PART 5: 거리별 성능 분석 =====
 fprintf("\n========================================================\n");
-fprintf("PART 5: Performance vs Distance (Default TDD)\n");
+fprintf("PART 5: Performance vs Distance\n");
 fprintf("========================================================\n");
 
 fig_perf = figure('Name','Performance vs Distance', 'Position', [100 100 1400 400], ...
@@ -976,7 +853,6 @@ for fIdx = 1:length(freqs)
     fc = freqs(fIdx);
     data_f = results_tdd(results_tdd.Frequency_GHz == fc/1e9, :);
     
-    % string 타입으로 처리
     config_names = unique(data_f.TDD_Config, 'stable');
     avg_dl = zeros(length(config_names), 1);
     avg_ul = zeros(length(config_names), 1);
@@ -1024,39 +900,36 @@ set(fig1, 'Visible', 'on');
 set(fig_perf, 'Visible', 'on');
 set(fig_tdd, 'Visible', 'on');
 
-for i = 1:length(heatmap_figs)
-    if ~isempty(heatmap_figs{i}) && isvalid(heatmap_figs{i})
-        set(heatmap_figs{i}, 'Visible', 'on');
-    end
-end
-
 fprintf("  All figures displayed!\n");
 
 %% ===== 최종 요약 =====
 fprintf("\n========================================================\n");
-fprintf("Analysis Complete\n");
+fprintf("Analysis Complete - UE-Only Version\n");
 fprintf("========================================================\n");
 fprintf("\nGenerated Files:\n");
 fprintf("  Data:\n");
 fprintf("    - %s\n", outCSV_ue_coordinates);
 fprintf("    - %s\n", outCSV_points);
-fprintf("    - %s\n", outCSV_heatmap);
 fprintf("    - %s\n", outCSV_coverage);
-fprintf("    - %s (NEW!)\n", outCSV_tdd_comparison);
-fprintf("    - %s (NEW!)\n", outCSV_tdd_distance);
+fprintf("    - %s\n", outCSV_tdd_comparison);
+fprintf("    - %s\n", outCSV_tdd_distance);
 fprintf("\n  Figures:\n");
 fprintf("    - UE_Deployment_Pattern.png\n");
-fprintf("    - SNR_Heatmap_*.png\n");
-fprintf("    - DL_Throughput_*.png (NEW!)\n");
-fprintf("    - UL_Throughput_*.png (NEW!)\n");
+fprintf("    - UE_DL_Throughput_Map_*.png (NEW!)\n");
+fprintf("    - UE_UL_Throughput_Map_*.png (NEW!)\n");
+fprintf("    - UE_SNR_Map_*.png (NEW!)\n");
 fprintf("    - Performance_vs_Distance.png\n");
-fprintf("    - TDD_Configuration_Comparison.png (NEW!)\n");
+fprintf("    - TDD_Configuration_Comparison.png\n");
 fprintf("\n========================================================\n");
-fprintf("Key Features:\n");
-fprintf("  ✓ TDD Configuration support (4 types)\n");
-fprintf("  ✓ Separate DL/UL Throughput calculation\n");
-fprintf("  ✓ Effective Bandwidth computation\n");
-fprintf("  ✓ TDD comparison analysis\n");
-fprintf("  ✓ Distance-based TDD performance\n");
-fprintf("  ✓ Fixed TDD_Config table errors\n");
+fprintf("Key Changes:\n");
+fprintf("  ✓ Removed heatmap computation (1600 grid points)\n");
+fprintf("  ✓ Only analyzes actual UE positions (72 points)\n");
+fprintf("  ✓ Added UE position-based scatter plot maps\n");
+fprintf("  ✓ Significantly faster computation time\n");
+fprintf("  ✓ More honest representation of actual network\n");
+fprintf("========================================================\n");
+fprintf("Computation Reduction:\n");
+fprintf("  Before: 72 UE + 1600 grid = 1672 ray traces per freq\n");
+fprintf("  After:  72 UE only = 72 ray traces per freq\n");
+fprintf("  Speedup: ~23x faster!\n");
 fprintf("========================================================\n");

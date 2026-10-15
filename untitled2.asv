@@ -1,0 +1,476 @@
+%% Urban Link and Coverage Analysis Using Ray Tracing
+% - Import and visualize 3-D buildings data into Site Viewer
+% - Define a transmitter site and ray tracing propagation model
+%   corresponding to a 5G urban scenario
+% - Analyze a link in non-line-of-sight conditions
+% - Calculate distances between BS and UE
+% - Visualize coverage using the shooting and bouncing rays (SBR) ray
+% tracing method with different numbers of reflections, diffractions, and
+% launched rays
+
+%% Import and Visualize buildings Data
+viewer = siteviewer(Buildings="_seongnam_map.osm", Basemap="topographic");
+
+%% =======================================================
+%%                Directional Antenna Setup
+%% =======================================================
+%% FR1 (4.7 GHz) - 8x8 Antenna Array 설정
+lambda_FR1 = physconst('LightSpeed') / 4.7e9;
+
+% 3GPP 표준을 따르는 5G NR 안테나 엘리먼트 생성
+gNBElement_FR1 = phased.NRAntennaElement( ...
+    'PolarizationAngle', -45, ... % 편파 각도
+    'Beamwidth', 65); % 빔폭 (도)
+
+% 8x8 Rectangular Panel Array 생성
+bsArray_FR1 = phased.NRRectangularPanelArray( ...
+    'Size', [8 8 1 1], ... % 8x8 element, 1 panel
+    'ElementSet', {gNBElement_FR1}, ...
+    'Spacing', lambda_FR1*[0.5 0.5 1 1]); % 반파장 간격
+
+%% FR2 (28 GHz) - 16x16 Antenna Array 설정
+lambda_FR2 = physconst('LightSpeed') / 28e9;
+
+% FR2용 안테나 엘리먼트 (더 좁은 빔)
+gNBElement_FR2 = phased.NRAntennaElement( ...
+    'PolarizationAngle', -45, ...
+    'Beamwidth', 30); % 더 좁은 빔 폭
+
+% 16x16 Rectangular Panel Array 생성
+bsArray_FR2 = phased.NRRectangularPanelArray( ...
+    'Size', [16 16 1 1], ... % 16x16 element, 1 panel
+    'ElementSet', {gNBElement_FR2}, ...
+    'Spacing', lambda_FR2*[0.5 0.5 1 1]);
+
+%% =======================================================
+%%                Define Transmitter Sites
+%% =======================================================
+
+%% Scenario 1 (주석 처리)
+% Frequency : 4.7 GHz
+% Transmitter Power : 80 W
+tx1 = txsite(Name="Small cell transmitter A", ...
+    Latitude=37.455715, ...
+    Longitude=127.133562, ...
+    AntennaHeight=30, ...
+    TransmitterPower=80, ... % 80 W
+    TransmitterFrequency=4.7e9, ...
+    Antenna=bsArray_FR1);
+
+% 5G NR 설정 (대역폭)
+cfgNR_FR1 = nrDLCarrierConfig( ...
+    'FrequencyRange','FR1', ...
+    'ChannelBandwidth',100); % 100 MHz
+
+% Frequency : 4.7 GHz
+% Transmitter Power : 80 W
+tx1 = txsite(Name="Small cell transmitter A", ...
+    Latitude=37.455715, ...
+    Longitude=127.133562, ...
+%     AntennaHeight=30, ...
+%     TransmitterPower=80, ... % 80 W
+%     TransmitterFrequency=4.7e9, ...
+%     Antenna=bsArray_FR1);
+
+%% Scenario 2
+% Frequency : 28 GHz
+% Transmitter Power : 2 W
+
+% Gachon University - AI building
+% tx1 = txsite(Name="Small cell transmitter A (LoS)", ...
+%     Latitude=37.455715, ...
+%     Longitude=127.133562, ...
+%     AntennaHeight=30, ...
+%     TransmitterPower=2, ... % 2 W
+%     TransmitterFrequency=28e9, ...
+%     Antenna=bsArray_FR2);
+
+% 5G NR 설정 (대역폭)
+% cfgNR_FR1 = nrDLCarrierConfig( ...
+%     'FrequencyRange','FR1', ...
+%     'ChannelBandwidth',100); % 100 MHz
+
+% Seoul Airport
+% tx2 = txsite(Name="Small cell transmitter B (NLoS)", ...
+%     Latitude=37.4451, ...
+%     Longitude=127.1106, ...
+%     AntennaHeight=30, ...
+%     TransmitterPower=2, ... % 2 W
+%     TransmitterFrequency=28e9, ...
+%     Antenna=bsArray_FR2);
+
+% 5G NR 설정 (대역폭)
+% cfgNR_FR2 = nrDLCarrierConfig( ...
+%     'FrequencyRange','FR2', ...
+%     'ChannelBandwidth',400); % 400 MHz
+
+show(tx1); 
+show(tx2);
+
+%% =======================================================
+%%                Define Receiver Sites
+%% =======================================================
+
+% TX1에 연결된 수신기
+rx1_1 = rxsite(Name="Small cell receiver #1-1", ...
+    Latitude=37.456715, ...
+    Longitude=127.132562, ...
+    AntennaHeight=1);
+
+rx1_2 = rxsite(Name="Small cell receiver #1-2", ...
+    Latitude=37.4576, ...
+    Longitude=127.1338, ...
+    AntennaHeight=1);
+
+rx1_3 = rxsite(Name="Small cell receiver #1-3", ...
+    Latitude=37.4563, ...
+    Longitude=127.1321, ...
+    AntennaHeight=1);
+
+% TX2에 연결된 수신기
+rx2_1 = rxsite(Name="Small cell receiver #2-1", ...
+    Latitude=37.4462, ...
+    Longitude=127.1109, ...
+    AntennaHeight=1);
+
+rx2_2 = rxsite(Name="Small cell receiver #2-2", ...
+    Latitude=37.4481, ...
+    Longitude=127.1113, ...
+    AntennaHeight=1);
+
+rx2_3 = rxsite(Name="Small cell receiver #2-3", ...
+    Latitude=37.4498, ...
+    Longitude=127.1146, ...
+    AntennaHeight=1);
+
+%% 모든 수신기를 Site Viewer에 표시
+show(rx1_1);
+show(rx1_2);
+show(rx1_3);
+show(rx2_1);
+show(rx2_2);
+show(rx2_3);
+
+%% Ray Tracing Propagation Model 설정
+rtpm = propagationModel("raytracing", ...
+    Method="sbr", ...
+    MaxNumReflections=3, ...  % Reflection path
+    MaxNumDiffractions=1, ...
+    BuildingsMaterial="concrete", ...
+    TerrainMaterial="concrete");
+
+%% =======================================================
+%%         BS-UE 거리 계산 및 출력
+%% =======================================================
+
+fprintf('\n============================================================\n');
+fprintf('          BS-UE Distance Calculation Results\n');
+fprintf('============================================================\n');
+
+% TX1과 수신기들 간의 거리 계산
+fprintf('\n[Base Station 1: %s]\n', tx1.Name);
+fprintf('Location: Lat=%.6f, Lon=%.6f, Height=%.1fm\n', ...
+    tx1.Latitude, tx1.Longitude, tx1.AntennaHeight);
+fprintf('------------------------------------------------------------\n');
+
+receivers1 = [rx1_1, rx1_2, rx1_3];
+distances1 = zeros(1, length(receivers1));
+
+for idx = 1:length(receivers1)
+    rx = receivers1(idx);
+    
+    % 거리 계산 (Euclidean 방식)
+    dist_euclidean = distance(tx1, rx, 'euclidean');
+    
+    % 거리 계산 (Great Circle 방식 - 지구 표면)
+    dist_greatcircle = distance(tx1, rx, 'greatcircle');
+    
+    distances1(idx) = dist_euclidean;
+    
+    fprintf('UE #%d (%s):\n', idx, rx.Name);
+    fprintf('  Location: Lat=%.6f, Lon=%.6f\n', rx.Latitude, rx.Longitude);
+    fprintf('  3D Distance (Euclidean):  %8.2f m\n', dist_euclidean);
+    fprintf('  2D Distance (Great Circle): %8.2f m\n', dist_greatcircle);
+    fprintf('  Vertical Distance: %8.2f m\n\n', tx1.AntennaHeight - rx.AntennaHeight);
+end
+
+% TX2와 수신기들 간의 거리 계산
+fprintf('[Base Station 2: %s]\n', tx2.Name);
+fprintf('Location: Lat=%.6f, Lon=%.6f, Height=%.1fm\n', ...
+    tx2.Latitude, tx2.Longitude, tx2.AntennaHeight);
+fprintf('------------------------------------------------------------\n');
+
+receivers2 = [rx2_1, rx2_2, rx2_3];
+distances2 = zeros(1, length(receivers2));
+
+for idx = 1:length(receivers2)
+    rx = receivers2(idx);
+    
+    % 거리 계산
+    dist_euclidean = distance(tx2, rx, 'euclidean');
+    dist_greatcircle = distance(tx2, rx, 'greatcircle');
+    
+    distances2(idx) = dist_euclidean;
+    
+    fprintf('UE #%d (%s):\n', idx, rx.Name);
+    fprintf('  Location: Lat=%.6f, Lon=%.6f\n', rx.Latitude, rx.Longitude);
+    fprintf('  3D Distance (Euclidean):  %8.2f m\n', dist_euclidean);
+    fprintf('  2D Distance (Great Circle): %8.2f m\n', dist_greatcircle);
+    fprintf('  Vertical Distance: %8.2f m\n\n', tx2.AntennaHeight - rx.AntennaHeight);
+end
+
+%% =======================================================
+%%    빔 조향 + 거리별 신호 강도 분석 (각 UE별 개별 시각화)
+%% =======================================================
+
+fprintf('\n============================================================\n');
+fprintf('     Beam Steering & Signal Strength Analysis (TX1)\n');
+fprintf('============================================================\n');
+
+% 신호 강도 저장 배열
+ss1_array = zeros(1, length(receivers1));
+beam_angles1 = zeros(1, length(receivers1));
+
+for idx = 1:length(receivers1)
+    rx = receivers1(idx);
+    
+    % 수신기 방향으로 송신기 빔 조향
+    tx1.AntennaAngle = angle(tx1, rx);
+    beam_angles1(idx) = tx1.AntennaAngle;
+    
+    fprintf('\nUE #%d (%s):\n', idx, rx.Name);
+    fprintf('  Distance: %.2f m\n', distances1(idx));
+    fprintf('  Beam Angle: %.2f degrees\n', tx1.AntennaAngle);
+    
+    % 각 UE별로 새로운 figure 생성하여 ray tracing 시각화
+    figure('Name', sprintf('TX1 -> UE #%d Ray Tracing', idx));
+    
+    % Ray tracing 수행 및 시각화
+    try
+        rays = raytrace(tx1, rx, rtpm);
+        
+        % 신호 강도 계산
+        ss = sigstrength(rx, tx1, rtpm);
+        ss1_array(idx) = ss;
+        
+        fprintf('  Received Power: %.2f dBm\n', ss);
+        fprintf('  Number of Paths: %d\n', length(rays{1}));
+        
+        % 경로 손실 계산 (Free Space Path Loss와 비교)
+        fspl = 20*log10(distances1(idx)) + 20*log10(tx1.TransmitterFrequency/1e9) + 92.45;
+        actual_pathloss = 10*log10(tx1.TransmitterPower*1000) - ss; % dB
+        fprintf('  Free Space Path Loss: %.2f dB\n', fspl);
+        fprintf('  Actual Path Loss: %.2f dB\n', actual_pathloss);
+        fprintf('  Additional Loss: %.2f dB\n', actual_pathloss - fspl);
+        
+        % 안테나 패턴도 함께 표시
+        pattern(tx1, 'Transparency', 0.4);
+        
+    catch ME
+        fprintf('  Error: %s\n', ME.message);
+        ss1_array(idx) = NaN;
+    end
+    
+    % 사용자가 결과를 볼 수 있도록 잠시 대기
+    pause(0.5);
+end
+
+fprintf('\n============================================================\n');
+fprintf('     Beam Steering & Signal Strength Analysis (TX2)\n');
+fprintf('============================================================\n');
+
+% 신호 강도 저장 배열
+ss2_array = zeros(1, length(receivers2));
+beam_angles2 = zeros(1, length(receivers2));
+
+for idx = 1:length(receivers2)
+    rx = receivers2(idx);
+    
+    % 수신기 방향으로 송신기 빔 조향
+    tx2.AntennaAngle = angle(tx2, rx);
+    beam_angles2(idx) = tx2.AntennaAngle;
+    
+    fprintf('\nUE #%d (%s):\n', idx, rx.Name);
+    fprintf('  Distance: %.2f m\n', distances2(idx));
+    fprintf('  Beam Angle: %.2f degrees\n', tx2.AntennaAngle);
+    
+    % 각 UE별로 새로운 figure 생성하여 ray tracing 시각화
+    figure('Name', sprintf('TX2 -> UE #%d Ray Tracing', idx));
+    
+    % Ray tracing 수행 및 시각화
+    try
+        rays = raytrace(tx2, rx, rtpm);
+        
+        % 신호 강도 계산
+        ss = sigstrength(rx, tx2, rtpm);
+        ss2_array(idx) = ss;
+        
+        fprintf('  Received Power: %.2f dBm\n', ss);
+        fprintf('  Number of Paths: %d\n', length(rays{1}));
+        
+        % 경로 손실 계산
+        fspl = 20*log10(distances2(idx)) + 20*log10(tx2.TransmitterFrequency/1e9) + 92.45;
+        actual_pathloss = 10*log10(tx2.TransmitterPower*1000) - ss;
+        fprintf('  Free Space Path Loss: %.2f dB\n', fspl);
+        fprintf('  Actual Path Loss: %.2f dB\n', actual_pathloss);
+        fprintf('  Additional Loss: %.2f dB\n', actual_pathloss - fspl);
+        
+        % 안테나 패턴도 함께 표시
+        pattern(tx2, 'Transparency', 0.4);
+        
+    catch ME
+        fprintf('  Error: %s\n', ME.message);
+        ss2_array(idx) = NaN;
+    end
+    
+    % 사용자가 결과를 볼 수 있도록 잠시 대기
+    pause(0.5);
+end
+
+%% =======================================================
+%%    거리 vs 신호 강도 시각화
+%% =======================================================
+
+% 거리 vs 신호 강도 플롯
+figure('Name', 'Distance vs Received Signal Strength');
+hold on;
+grid on;
+
+% TX1 데이터
+plot(distances1, ss1_array, 'ro-', 'LineWidth', 2, 'MarkerSize', 10, ...
+    'DisplayName', 'BS1 (28 GHz, 2W)');
+
+% TX2 데이터
+plot(distances2, ss2_array, 'bs-', 'LineWidth', 2, 'MarkerSize', 10, ...
+    'DisplayName', 'BS2 (28 GHz, 2W)');
+
+% 각 포인트에 UE 번호 라벨 추가
+for idx = 1:length(distances1)
+    text(distances1(idx), ss1_array(idx), sprintf('  UE1-%d', idx), ...
+        'FontSize', 9, 'Color', 'r');
+end
+for idx = 1:length(distances2)
+    text(distances2(idx), ss2_array(idx), sprintf('  UE2-%d', idx), ...
+        'FontSize', 9, 'Color', 'b');
+end
+
+xlabel('Distance (m)', 'FontSize', 12, 'FontWeight', 'bold');
+ylabel('Received Signal Strength (dBm)', 'FontSize', 12, 'FontWeight', 'bold');
+title('Distance vs Received Signal Strength', 'FontSize', 14, 'FontWeight', 'bold');
+legend('Location', 'best', 'FontSize', 11);
+hold off;
+
+%% =======================================================
+%%    빔 각도 비교 시각화
+%% =======================================================
+
+figure('Name', 'Beam Steering Angles');
+subplot(2,1,1);
+bar(beam_angles1);
+xlabel('UE Index');
+ylabel('Beam Angle (degrees)');
+title('TX1 Beam Steering Angles per UE');
+grid on;
+set(gca, 'XTickLabel', {'UE1-1', 'UE1-2', 'UE1-3'});
+
+subplot(2,1,2);
+bar(beam_angles2);
+xlabel('UE Index');
+ylabel('Beam Angle (degrees)');
+title('TX2 Beam Steering Angles per UE');
+grid on;
+set(gca, 'XTickLabel', {'UE2-1', 'UE2-2', 'UE2-3'});
+
+%% =======================================================
+%%    Coverage Map 생성 (전방향성 안테나와 비교)
+%% =======================================================
+
+fprintf('\n============================================================\n');
+fprintf('            Generating Coverage Maps\n');
+fprintf('============================================================\n');
+
+% 새로운 figure에서 coverage map 생성
+figure('Name', 'Coverage Maps Comparison');
+
+% 반사 횟수 조정
+rtpm.MaxNumReflections = 0;
+
+% TX1 - 전방향성 안테나
+subplot(2,2,1);
+tx1_omni = txsite(Name="TX1 Omni", ...
+    Latitude=37.455715, ...
+    Longitude=127.133562, ...
+    AntennaHeight=30, ...
+    TransmitterPower=2, ...
+    TransmitterFrequency=28e9);
+coverage(tx1_omni, rtpm, ...
+    SignalStrengths=-120:-5, ...
+    MaxRange=300, ...
+    Resolution=3, ...
+    Transparency=0.6);
+title('TX1 - Omnidirectional Antenna');
+
+% TX1 - 지향성 안테나 (중앙 수신기 방향)
+subplot(2,2,2);
+tx1.AntennaAngle = angle(tx1, rx1_2);
+coverage(tx1, rtpm, ...
+    SignalStrengths=-120:-5, ...
+    MaxRange=300, ...
+    Resolution=3, ...
+    Transparency=0.6);
+title(sprintf('TX1 - Directional (%.1f°)', tx1.AntennaAngle));
+
+% TX2 - 전방향성 안테나
+subplot(2,2,3);
+tx2_omni = txsite(Name="TX2 Omni", ...
+    Latitude=37.4451, ...
+    Longitude=127.1106, ...
+    AntennaHeight=30, ...
+    TransmitterPower=2, ...
+    TransmitterFrequency=28e9);
+coverage(tx2_omni, rtpm, ...
+    SignalStrengths=-120:-5, ...
+    MaxRange=300, ...
+    Resolution=3, ...
+    Transparency=0.6);
+title('TX2 - Omnidirectional Antenna');
+
+% TX2 - 지향성 안테나 (중앙 수신기 방향)
+subplot(2,2,4);
+tx2.AntennaAngle = angle(tx2, rx2_2);
+coverage(tx2, rtpm, ...
+    SignalStrengths=-120:-5, ...
+    MaxRange=300, ...
+    Resolution=3, ...
+    Transparency=0.6);
+title(sprintf('TX2 - Directional (%.1f°)', tx2.AntennaAngle));
+
+%% =======================================================
+%%    결과 요약 테이블
+%% =======================================================
+
+fprintf('\n============================================================\n');
+fprintf('                    Results Summary\n');
+fprintf('============================================================\n');
+
+% TX1 결과 요약
+fprintf('\n[TX1 Results]\n');
+fprintf('%-15s | %10s | %12s | %15s\n', 'UE Name', 'Distance(m)', 'Beam Angle', 'Rx Power(dBm)');
+fprintf('----------------------------------------------------------------\n');
+for idx = 1:length(receivers1)
+    fprintf('%-15s | %10.2f | %12.2f | %15.2f\n', ...
+        receivers1(idx).Name, distances1(idx), beam_angles1(idx), ss1_array(idx));
+end
+
+% TX2 결과 요약
+fprintf('\n[TX2 Results]\n');
+fprintf('%-15s | %10s | %12s | %15s\n', 'UE Name', 'Distance(m)', 'Beam Angle', 'Rx Power(dBm)');
+fprintf('----------------------------------------------------------------\n');
+for idx = 1:length(receivers2)
+    fprintf('%-15s | %10.2f | %12.2f | %15.2f\n', ...
+        receivers2(idx).Name, distances2(idx), beam_angles2(idx), ss2_array(idx));
+end
+
+fprintf('\n============================================================\n');
+fprintf('              Analysis Complete!\n');
+fprintf('============================================================\n');
