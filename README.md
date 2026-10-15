@@ -1,125 +1,108 @@
-# 5G Toolbox FR1 / FR2 Comparison
+# 5G_Toolbox_FR_Compare
 
-MATLAB 5G Toolbox와 Ray Tracing(Communications / Antenna Toolbox)을 이용해
-**FR1(4.7 GHz)과 FR2(28 GHz) 5G 특화망의 커버리지·성능을 비교**한 실험 코드와 결과물 모음입니다.
-실험 지역은 가천대학교 글로벌캠퍼스(경기 성남시 수정구)이며, OpenStreetMap 건물 데이터를 기반으로 시뮬레이션합니다.
+MATLAB 5G Toolbox + Ray Tracing으로 FR1(4.7 GHz)과 FR2(28 GHz) 5G 특화망 커버리지를 비교한 코드 모음.
+가천대 글로벌캠퍼스(성남시 수정구) 일대를 OSM 건물 데이터로 모델링해서 시뮬레이션함.
 
-## 폴더 구조
+## 구조
 
 ```
-.
-├── setup.m                      # MATLAB 경로 설정 (실행 전 1회)
-├── scripts/
-│   ├── 01_cdl_tutorials/        # nrCDLChannel / Ray Tracing 기초 튜토리얼
-│   ├── 02_fr1_fr2_comparison/   # FR1 vs FR2 히트맵·UE 배치·커버리지 비교 (메인 실험)
-│   ├── 03_urban_ray_tracing/    # Urban Link & Coverage 분석, 음영 지역 예측
-│   └── 04_radiomap_dataset/     # 딥러닝용 256x256 radio map 데이터셋 생성
-├── data/
-│   └── osm/                     # OpenStreetMap 건물 데이터 (.osm)
-└── results/
-    ├── fr1_fr2_comparison/      # 02 스크립트 결과 (figures/, csv/)
-    ├── urban_ray_tracing/       # 03 스크립트 결과
-    └── radiomap_dataset/        # 04 스크립트 결과 (.mat, .png)
+setup.m                        경로 등록용. 실행 전 한 번 돌릴 것
+scripts/
+  01_cdl_tutorials/            nrCDLChannel, ray tracing 연습 코드
+  02_fr1_fr2_comparison/       FR1 vs FR2 히트맵, UE 배치, 커버리지 비교
+  03_urban_ray_tracing/        Urban link & coverage 분석, 음영지역 예측
+  04_radiomap_dataset/         딥러닝용 256x256 radio map 생성
+data/osm/                      OSM 건물 데이터
+results/
+  fr1_fr2_comparison/          02 결과 (figures, csv)
+  urban_ray_tracing/           03 결과
+  radiomap_dataset/            04 결과
 ```
 
-## 실행 방법
+## 실행
 
-1. MATLAB에서 저장소 루트 폴더를 연 뒤 경로를 등록합니다.
+- MATLAB에서 저장소 루트를 연 다음 `setup` 실행. scripts/, data/ 하위 폴더가 path에 추가됨
+- 스크립트는 OSM 파일을 이름으로만 부르기 때문에 (`siteviewer(Buildings="seongnam.osm")`) path 등록이 안 되어 있으면 지도 로딩에서 실패함
+- 결과 파일(png, pdf, csv, mat)은 현재 폴더에 떨어짐. 기존 결과 옆에 두려면 해당 results 폴더로 cd 하고 나서 실행
 
-   ```matlab
-   setup
-   ```
-
-2. 원하는 스크립트를 실행합니다. 예:
-
-   ```matlab
-   CDL_FR_analysis          % FR1 vs FR2 히트맵 + 실제 좌표 UE 배치 분석
-   ```
-
-   결과 파일(PNG/PDF/CSV/MAT)은 **현재 작업 폴더**에 저장됩니다. 기존 결과와 같은 위치에 저장하려면
-   먼저 `cd results/fr1_fr2_comparison` 등으로 이동한 뒤 실행하세요.
-
-### 요구 사항
+필요 툴박스
 
 - MATLAB R2025a
-- 5G Toolbox, Communications Toolbox, Antenna Toolbox(Site Viewer / Ray Tracing), Phased Array System Toolbox
-- Wireless Network Simulation Library (`NR_Intercell_Tutorial_1.m` 전용)
-- Parallel Computing Toolbox + GPU (선택, `Accelerate_Ray_Tracing_Analysis_Using_GPU.m`)
+- 5G Toolbox, Communications Toolbox, Antenna Toolbox, Phased Array System Toolbox
+- Wireless Network Simulation Library: NR_Intercell_Tutorial_1.m 에서만 사용
+- GPU 가속은 선택. Accelerate_Ray_Tracing_Analysis_Using_GPU.m 으로 GPU 인식 여부만 확인
 
-## 스크립트 설명
+## 스크립트
 
-### 01_cdl_tutorials — CDL 채널 / Ray Tracing 기초
+### 01_cdl_tutorials
 
-| 파일 | 내용 |
-|---|---|
-| `CDL_Tutorial.m` | 단일 BS, 다중 UE에 대한 `nrCDLChannel` 기본 예제 (6 GHz) |
-| `CDL_Tut_2.m` | BS 2개 + 다중 UE 버전 |
-| `CDL_ex_1_1.m`, `CDL_ex_1_2.m`, `CDL_ex_2.m` | MathWorks CDL 예제를 성남 지도에 맞게 수정한 연습 코드 |
-| `CDL_freq.m` | 주파수(28 GHz)별 CDL 채널 응답 확인 |
-| `CDL_Code.m` | 단일 BS 기준 네트워크 가용성(최소 수신 감도) 분석 초안 |
-| `Interactive_CDL_Channel_Model_Configuration.m` | CDL 채널 모델 설정 앱 실행 |
-| `NR_Intercell_Tutorial_1.m` | `wirelessNetworkSimulator` 기반 3-gNB 셀 간 간섭 튜토리얼 |
+- CDL_Tutorial.m : BS 1개, UE 여러 개 nrCDLChannel 기본 예제 (6 GHz)
+- CDL_Tut_2.m : BS 2개 버전
+- CDL_ex_1_1.m, CDL_ex_1_2.m, CDL_ex_2.m : MathWorks CDL 예제를 성남 지도로 바꿔서 돌려본 것
+- CDL_freq.m : 28 GHz에서 CDL 채널 응답 확인
+- CDL_Code.m : BS 1개 기준 최소 수신감도(-95 dBm) 기준 가용성 분석 초안
+- Interactive_CDL_Channel_Model_Configuration.m : CDL 설정 앱 실행
+- NR_Intercell_Tutorial_1.m : wirelessNetworkSimulator로 gNB 3개 셀간 간섭 튜토리얼
 
-### 02_fr1_fr2_comparison — FR1 vs FR2 비교 (메인 실험)
+### 02_fr1_fr2_comparison
 
-| 파일 | 내용 | 주요 출력 |
-|---|---|---|
-| `CDL_FR1_FR2_compare.m` | 전체 영역 히트맵(SNR/Rx Power/Throughput) + 대표 포인트 6개 비교 | `Heatmap_*`, `*_bar.png`, `results_FR1_FR2_*.csv` |
-| `CDL_FR1_FR2_compare_code.m` | 위 분석 + FR2 추가 기지국 수 계산, 거리별 성능 저하, 군사용 요구사항 분석 | `BS_Optimization_Analysis.png`, `Military_*`, `results_BS_optimization.csv` |
-| `CDL_FR1_FR2_Wifi_compare_code.m` | FR1 / FR2 / Wi-Fi(5 GHz) 성능 비교 및 군사용 적용 가능성(드론 제어 시나리오) | `BS_Density.png`, `military_evaluation_results.csv` |
-| `CDL_FR_analysis.m` | BS 중심 동적 히트맵 + 실제 위경도 좌표 기반 UE 배치 및 시각화 | `*_Heatmap_*_GHz.png/pdf`, `UE_Deployment_Pattern.png`, `ue_coordinates.csv` |
-| `CDL_FR_compare_analysis.m` | `CDL_FR_analysis.m` 개선판 — 각도 간격 UE 배치, 백그라운드 figure 생성 | 위와 동일 |
-| `CDL_FR_compare_code.m` | 히트맵 없이 실제 UE 위치만 분석하는 경량 버전 | `UE_Deployment_Pattern.png` |
-| `CDL_FR_compare_test.m` | UE 위치 분석 + TDD 구성 비교, DL/UL Throughput 맵 | `UE_DL/UL_Throughput_Map_*`, `TDD_*`, `results_TDD_*.csv` |
-| `CDL_FR_compare.m` | 단일 UE 포인트에 대한 FR1 채널 응답 확인용 최소 예제 | - |
+이 저장소의 본 실험. 시기 순서대로 발전시킨 거라 뒤쪽 파일일수록 최신 버전.
 
-### 03_urban_ray_tracing — Urban Link & Coverage 분석
+- CDL_FR1_FR2_compare.m : 영역 전체 히트맵(SNR, Rx power, throughput) + 대표 포인트 6개 비교
+  - 출력: Heatmap_*.png, *_bar.png, results_FR1_FR2_*.csv
+- CDL_FR1_FR2_compare_code.m : 위 내용에 FR2 추가 기지국 수 계산, 거리별 성능 저하, 군용 요구사항 분석 추가
+  - 출력: BS_Optimization_Analysis.png, Military_*.png, results_BS_optimization.csv, results_military_requirements.csv
+- CDL_FR1_FR2_Wifi_compare_code.m : FR1 / FR2 / Wi-Fi 5 GHz 세 가지 비교. 드론 원격제어 시나리오로 군용 적용 가능성 검토
+  - 출력: BS_Density.png, military_evaluation_results.csv
+- CDL_FR_analysis.m : BS 중심 히트맵 + 실제 위경도 좌표로 UE 배치
+  - 출력: SNR/Throughput/RxPower_Heatmap_*_GHz.png/pdf, UE_Deployment_Pattern.png, ue_coordinates.csv
+- CDL_FR_compare_analysis.m : CDL_FR_analysis.m 개선판. UE를 일정 각도 간격으로 배치하고 figure는 백그라운드에서 생성
+- CDL_FR_compare_code.m : 히트맵 빼고 실제 UE 위치만 보는 가벼운 버전
+- CDL_FR_compare_test.m : UE 위치 분석 + TDD 설정 비교, DL/UL throughput 맵
+  - 출력: UE_DL_Throughput_Map_*.png, UE_UL_Throughput_Map_*.png, TDD_Configuration_Comparison.png, results_TDD_*.csv
+- CDL_FR_compare.m : UE 한 점에 대한 FR1 채널 응답만 확인하는 최소 예제
 
-| 파일 | 내용 | 주요 출력 |
-|---|---|---|
-| `Urban_Link_and_Coverage_Analysis_Using_Ray_Tracing.m` | MathWorks 예제 기반 NLOS 링크 분석 및 SBR 커버리지 시각화 | - |
-| `Urban_Link_and_Coverage_Analysis_Using_Ray_Tracing2.m` | BS–UE 거리 계산, 거리별 신호 세기 분석 추가 | `signal_strength_analysis.csv`, `UE_Signal_Strength.png`, `Distance_vs_Power.png` |
-| `Urban_Link_and_Coverage.m` | TX 2개(4.7 GHz / 28 GHz)에 대해 동일 링크 실험 반복 | - |
-| `Urban_Link.m` | 가천대 AI공학관 위치 고정 송신국 기준 링크 분석 | - |
-| `NR_FR_analysis.m` | 방향성 안테나(8x8 / 16x16 패널) 기반 FR1·FR2 커버리지 분석 | - |
-| `NR_FR_analysis2.m` | SNR / SINR 계산 보정 버전 | - |
-| `NR_FR_analysis_fix.m` | BS 2개(가천대, 서울공항) 시나리오 | - |
-| `NR_FR_Comparative_analysis.m` | 현실적 송신 전력(FR1 60 W / FR2 2 W) + RX 빔포밍 이득 반영 비교 | - |
-| `NR_FR_Comparative_analysis_v1.m` | 위 스크립트의 이전 버전(RX 빔포밍 이득 미반영) | - |
-| `NR_FR_analysis_ray_tracing.m` | 5G 음영 지역 예측 — ground truth 저장 | `5G_Coverage_Analysis_<timestamp>.*` |
-| `Ray_Tracing.m`, `Ray_Tracing_Test.m` | 반사 차수 / 기지국 시나리오별 Ray Tracing 커버리지 테스트 | - |
-| `Accelerate_Ray_Tracing_Analysis_Using_GPU.m` | GPU 사용 가능 여부 확인 | - |
+### 03_urban_ray_tracing
 
-### 04_radiomap_dataset — 딥러닝용 Radio Map 데이터셋 생성
+- Urban_Link_and_Coverage_Analysis_Using_Ray_Tracing.m : MathWorks 예제 기반 NLOS 링크 분석, SBR 커버리지 시각화
+- Urban_Link_and_Coverage_Analysis_Using_Ray_Tracing2.m : BS-UE 거리 계산, 거리별 신호세기 분석 추가
+  - 출력: signal_strength_analysis.csv, UE_Signal_Strength.png, Distance_vs_Power.png
+- Urban_Link_and_Coverage.m : TX 2개(4.7 / 28 GHz)에 같은 링크 실험 반복
+- Urban_Link.m : 가천대 AI공학관 위치에 송신국 고정하고 링크 분석
+- NR_FR_analysis.m : 방향성 패널 안테나(FR1 8x8, FR2 16x16)로 FR1/FR2 커버리지 분석
+- NR_FR_analysis2.m : SNR, SINR 계산 보정 버전
+- NR_FR_analysis_fix.m : BS 2개(가천대, 서울공항) 시나리오
+- NR_FR_Comparative_analysis.m : 송신전력 FR1 60 W / FR2 2 W 로 두고 RX 빔포밍 이득까지 반영한 비교
+- NR_FR_Comparative_analysis_v1.m : 위 파일 이전 버전. RX 빔포밍 이득 없음
+- NR_FR_analysis_ray_tracing.m : 음영지역 예측용 ground truth 생성
+  - 출력: 5G_Coverage_Analysis_<timestamp>.mat/csv/png/fig
+- Ray_Tracing.m, Ray_Tracing_Test.m : 반사 차수, 기지국 시나리오 바꿔가며 coverage 테스트
+- Accelerate_Ray_Tracing_Analysis_Using_GPU.m : gpuDevice 확인
 
-256×256 격자(500 m × 500 m)로 건물 마스크 / 송신기 위치 / 커버리지(수신 전력) 맵을 생성합니다.
-세 스크립트의 `[Step 0]` 초기 설정(송신기 위치, 격자 크기)은 반드시 동일하게 유지해야 합니다.
+### 04_radiomap_dataset
 
-| 파일 | 내용 | 출력 |
-|---|---|---|
-| `make_building_mask.m` | OSM 파일을 파싱해 건물 영역을 격자에 래스터화 | `building_map_mask.mat` |
-| `make_tx_map.m` | 송신기 좌표를 격자 픽셀로 변환한 Tx 맵 | `tx_map.mat`, `tx_location_map.png` |
-| `make_coverage_map.m` | Ray Tracing `coverage` 결과를 격자로 변환한 수신 전력 맵 | `coverage_map_fast.mat`, `coverage_only_clean.png` |
-| `coverage_power_map_plot.m` | 커버리지 결과를 논문 스타일 히트맵(`imagesc`)으로 시각화 | - |
-| `OutdoorRayTracingCoverageMap.m` | 커버리지 맵 생성 초기 버전 | `result_matrix.mat` |
-| `OutdoorRayTracingDistanceMap.m` | 송신기까지의 거리 맵 생성 | `distance_map.mat` |
-| `OutdoorRayTracingExample*.m` | Site Viewer + Ray Tracing 커버리지 기본 예제 |- |
+500 m x 500 m 영역을 256x256 격자로 잘라서 건물 마스크, 송신기 위치, 수신전력 맵을 만듦.
+세 스크립트의 Step 0 설정(bsPositions, gridSize, mapWidthMeters)이 서로 같아야 격자가 맞음.
 
-`results/radiomap_dataset/dataset_lat*_lon*.mat`는 세 지점(송신기 위치)에 대해 생성된 데이터셋입니다.
+- make_building_mask.m : OSM 파싱해서 건물 polygon을 격자에 래스터화. building_map_mask.mat
+- make_tx_map.m : 송신기 좌표를 격자 픽셀로 변환. tx_map.mat, tx_location_map.png
+- make_coverage_map.m : coverage() 결과를 격자로 변환한 수신전력 맵. coverage_map_fast.mat, coverage_only_clean.png
+- coverage_power_map_plot.m : 커버리지 결과를 imagesc로 논문 그림 스타일로 출력
+- OutdoorRayTracingCoverageMap.m : 커버리지 맵 생성 초기 버전. result_matrix.mat
+- OutdoorRayTracingDistanceMap.m : 송신기까지 거리 맵. distance_map.mat
+- OutdoorRayTracingExample*.m : siteviewer + ray tracing coverage 기본 예제
 
-## 데이터 (`data/osm`)
+results/radiomap_dataset/dataset_lat*_lon*.mat 는 송신기 위치 세 곳에 대해 뽑은 데이터셋.
 
-| 파일 | 지역 |
-|---|---|
-| `seongnam.osm`, `seongnam_map.osm` | 성남시 (가천대 주변 포함) — 대부분의 스크립트가 사용 |
-| `gachon_univ_map.osm`, `gachon_mangkeong.osm` | 가천대 캠퍼스 |
-| `gapyeong.osm`, `seoraksan.osm`, `taebaeksan.osm` | 산악 지형 비교용 |
+## 데이터
 
-> **참고:** 스크립트들은 `seongnam.osm` 또는 `seongnam_map.osm`을 파일명으로만 참조하므로 `setup`으로 `data/osm`이 경로에 올라가 있어야 합니다.
+- seongnam.osm, seongnam_map.osm : 성남시. 대부분의 스크립트가 이 둘 중 하나를 씀
+- gachon_univ_map.osm, gachon_mangkeong.osm : 가천대 캠퍼스
+- gapyeong.osm, seoraksan.osm, taebaeksan.osm : 산악 지형 비교용
 
-## 정리 이력
+## 메모
 
-- 이전 커밋에서 루트에 평면으로 올라가 있던 파일들을 위 구조로 재배치했습니다.
-- 내용이 완전히 같던 `5G_NR_FR_analysis.m`, `NR_FR_analysis_.m`는 `NR_FR_analysis.m` 하나로 통합했습니다.
-- `untitled*.m`은 역할에 맞는 이름으로, `NR_FR_Comparative_analyss.m`(오타)은 `NR_FR_Comparative_analysis_v1.m`으로 변경했습니다.
-- MATLAB 자동 저장 파일(`*.asv`)은 삭제하고 `.gitignore`에 추가했습니다. 필요하면 git 이력에서 복구할 수 있습니다.
+- 처음엔 전부 루트에 올라가 있던 걸 위 구조로 옮김. 코드 자체는 OSM 파일명 외에 손대지 않음
+- 5G_NR_FR_analysis.m, NR_FR_analysis_.m 은 NR_FR_analysis.m 과 내용이 같아서 삭제
+- untitled*.m 은 역할대로 이름 변경. NR_FR_Comparative_analyss.m 은 오타라서 _v1 으로 변경
+- *.asv 는 지우고 .gitignore 에 추가. 필요하면 git 이력에서 꺼낼 수 있음
