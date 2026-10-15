@@ -1,0 +1,15 @@
+# MATLAB autosave / temp files
+*.asv
+*.m~
+*.autosave
+*.mex*
+slprj/
+codegen/
+
+# macOS
+.DS_Store
+._*
+
+# Editor
+.vscode/
+.idea/
